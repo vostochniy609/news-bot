@@ -1,58 +1,58 @@
-from aiogram import Bot, Dispatcher, executor, types
-
+import asyncio
+import logging
 import os
-BOT_TOKEN = os.getenv("8405870113:AAF5NkAeWHnIS3IAxcPjoDVa0FxVUSfXGOs")
-ADMIN_ID = 8155665799
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
+from aiogram import Bot, Dispatcher, F
+from aiogram.types import Message
+from aiogram.filters import CommandStart
 
+# ================= НАСТРОЙКИ =================
 
-@dp.message_handler(commands=["start"])
-async def start(message: types.Message):
-    await message.answer(
-        "Отправьте новость:"
-    )
+BOT_TOKEN = os.getenv("8405870113:AAF5NkAeWHnIS3IAxcPjoDVa0FxVUSfXGOs")  # токен через Render Variables
+ADMIN_ID = int(os.getenv("8155665799"))  # твой Telegram ID (числом)
 
+# =============================================
 
-@dp.message_handler(content_types=types.ContentTypes.TEXT)
-async def handle_text(message: types.Message):
-    await bot.send_message(
-        ADMIN_ID,
-        f"📰 ТЕКСТОВАЯ НОВОСТЬ\n"
-        f"От: @{message.from_user.username or message.from_user.id}\n\n"
-        f"{message.text}"
-    )
-    await message.answer("Новость отправлена на модерацию.")
+logging.basicConfig(level=logging.INFO)
 
 
-@dp.message_handler(content_types=types.ContentTypes.PHOTO)
-async def handle_photo(message: types.Message):
-    await bot.send_photo(
-        ADMIN_ID,
-        message.photo[-1].file_id,
-        caption=(
-            "📰 НОВОСТЬ (ФОТО)\n"
-            f"От: @{message.from_user.username or message.from_user.id}\n\n"
-            f"{message.caption or 'Без подписи'}"
+async def main():
+    if not BOT_TOKEN or not ADMIN_ID:
+        raise RuntimeError("Не заданы BOT_TOKEN или ADMIN_ID")
+
+    bot = Bot(token=BOT_TOKEN)
+    dp = Dispatcher()
+
+    @dp.message(CommandStart())
+    async def start(message: Message):
+        await message.answer(
+            "Отправь новость:\n"
+            "• текст\n"
+            "• фото\n"
+            "• видео\n"
+            "• документ\n\n"
+            "Сообщение будет передано в редакцию."
         )
-    )
-    await message.answer("Новость отправлена.")
 
-
-@dp.message_handler(content_types=types.ContentTypes.VIDEO)
-async def handle_video(message: types.Message):
-    await bot.send_video(
-        ADMIN_ID,
-        message.video.file_id,
-        caption=(
-            "📰 НОВОСТЬ (ВИДЕО)\n"
-            f"От: @{message.from_user.username or message.from_user.id}\n\n"
-            f"{message.caption or 'Без подписи'}"
-        )
+    @dp.message(
+        F.text
+        | F.photo
+        | F.video
+        | F.document
+        | F.voice
+        | F.audio
+        | F.video_note
     )
-    await message.answer("Новость отправлена.")
+    async def forward_to_admin(message: Message):
+        try:
+            await message.forward(chat_id=ADMIN_ID)
+        except Exception as e:
+            logging.error(f"Ошибка пересылки: {e}")
+            await message.answer("Ошибка отправки. Попробуй позже.")
+
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
-    executor.start_polling(dp)
+    asyncio.run(main())
+
