@@ -8,7 +8,7 @@ from aiogram.filters import CommandStart
 
 # ================= НАСТРОЙКИ =================
 
-BOT_TOKEN = os.getenv("8405870113:AAF5NkAeWHnIS3IAxcPjoDVa0FxVUSfXGOs")  # токен через Render Variables
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # токен через Render Variables
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
 # =============================================
