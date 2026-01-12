@@ -1,78 +1,60 @@
+import os
 import asyncio
 import logging
-import os
 
 from aiohttp import web
-from aiogram import Bot, Dispatcher, F
+from aiogram import Bot, Dispatcher
 from aiogram.types import Message
-from aiogram.filters import CommandStart
+from aiogram.exceptions import TelegramRetryAfter
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+
+TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://your-service.onrender.com/webhook
+PORT = int(os.getenv("PORT", 10000))
 
 logging.basicConfig(level=logging.INFO)
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
-WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL") + WEBHOOK_PATH
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
 
 
-async def start_bot():
-    if not BOT_TOKEN or not ADMIN_ID:
-        raise RuntimeError("BOT_TOKEN или ADMIN_ID не заданы")
+# ===== ХЕНДЛЕР =====
+@dp.message()
+async def echo(message: Message):
+    await message.answer(message.text)
 
-    bot = Bot(token=BOT_TOKEN)
-    dp = Dispatcher()
 
-    @dp.message(CommandStart())
-    async def start(message: Message):
-        await message.answer(
-            "Отправь новость:\n"
-            "• текст\n"
-            "• фото\n"
-            "• видео\n"
-            "• документ\n\n"
-            "Сообщение будет передано в редакцию."
-        )
+# ===== WEBHOOK =====
+async def on_startup(app: web.Application):
+    try:
+        await bot.set_webhook(WEBHOOK_URL)
+        logging.info("Webhook установлен")
+    except TelegramRetryAfter as e:
+        logging.warning(f"FloodWait при setWebhook: {e.retry_after}s")
 
-    @dp.message(
-        F.text
-        | F.photo
-        | F.video
-        | F.document
-        | F.voice
-        | F.audio
-        | F.video_note
-    )
-    async def forward(message: Message):
-        await message.forward(ADMIN_ID)
 
-    await bot.set_webhook(WEBHOOK_URL)
+async def on_shutdown(app: web.Application):
+    await bot.session.close()
 
+
+def main():
     app = web.Application()
 
-    async def handle(request):
-        update = await request.json()
-        await dp.feed_webhook_update(bot, update)
-        return web.Response()
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
 
-    app.router.add_post(WEBHOOK_PATH, handle)
+    SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+    ).register(app, path="/webhook")
 
-    runner = web.AppRunner(app)
-    await runner.setup()
+    setup_application(app, dp, bot=bot)
 
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, host="0.0.0.0", port=port)
-    await site.start()
-
-    logging.info("Webhook запущен")
-
-
-async def main():
-    await start_bot()
-    while True:
-        await asyncio.sleep(3600)
+    web.run_app(app, host="0.0.0.0", port=PORT)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
+
 
 
